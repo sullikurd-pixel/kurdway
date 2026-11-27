@@ -15,7 +15,7 @@ async def lifespan(app):
     initialize()
     yield
 
-app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.4.1-dev", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.5.0-dev", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"])
 
 app.include_router(admin_router)
@@ -36,7 +36,7 @@ def favicon():
 
 @app.get("/{name}")
 def asset(name: str):
-    if name not in {"index.html", "style.css", "app.js", "ui.js", "favicon.svg", "admin.css", "admin.js", "account.js"}:
+    if name not in {"index.html", "style.css", "app.js", "ui.js", "favicon.svg", "admin.css", "admin.js", "account.js", "customer.css"}:
         raise HTTPException(status_code=404)
     path = ROOT / name
     if not path.is_file() or path.is_symlink():

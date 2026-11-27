@@ -1,10 +1,11 @@
-"""Local test-account OTP flow. No real email delivery or production use."""
+"""Loopback-only OTP authentication with optional SMTP delivery."""
 import hashlib, hmac, secrets, threading, time, sqlite3, os
 from contextlib import closing
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, EmailStr
-from admin import STORE, local, page
+from admin import local, page
+from database import STORE, connect
 from mail_delivery import settings, deliver, welcome
 
 router = APIRouter()
@@ -30,8 +31,13 @@ def otp_digest(email, code):
 def test_email(value):
     email = str(value).lower()
     # Use a reserved test subdomain accepted by email-validator.
-    if not email.endswith("@example.com") and settings() is None:
-        raise HTTPException(400, "Local preview: use an example.com test address only")
+    if not email.endswith("@example.com"):
+        try:
+            config = settings()
+        except (OSError, ValueError, RuntimeError):
+            raise HTTPException(503, "Email configuration unavailable") from None
+        if config is None:
+            raise HTTPException(400, "Local preview: use an example.com test address only")
     return email
 
 def response(data):
@@ -56,24 +62,34 @@ def request_code(body: Email, request: Request):
             raise HTTPException(429, "Wait before requesting another code")
         requests.append(now)
         code = f"{secrets.randbelow(1000000):06d}"
-        pending[email] = (otp_digest(email,code),now+300,0,now)
-        if not email.endswith("@example.com"):
-            try:
-                deliver(email,code,settings())
-            except Exception:
+        entry = (otp_digest(email,code),now+300,0,now)
+        pending[email] = entry
+    if not email.endswith("@example.com"):
+        try:
+            deliver(email,code,settings())
+        except Exception:
+            with lock:
+                if pending.get(email) is entry:
+                    pending.pop(email,None)
+            raise HTTPException(503,"Email delivery unavailable. Contact the owner.") from None
+        return response({"ok":True,"delivery":"email"})
+    # Serialize test mailbox writes; never expose codes in API responses.
+    try:
+        with lock:
+            folder = STORE / "test-mail"
+            folder.mkdir(mode=0o700, exist_ok=True)
+            if folder.is_symlink():
+                raise RuntimeError("Unsafe test mailbox")
+            os.chmod(folder,0o700)
+            path = folder / "latest.txt"
+            fd = os.open(path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
+            with os.fdopen(fd,"w") as f:
+                f.write("LOCAL TEST ONLY\n"+email+"\n"+code+"\nExpires in 5 minutes.\n")
+    except (OSError, RuntimeError):
+        with lock:
+            if pending.get(email) is entry:
                 pending.pop(email,None)
-                raise HTTPException(503,"Email delivery unavailable. Contact the owner.")
-            return response({"ok":True,"delivery":"email"})
-        # Local preview only; never expose codes in API responses.
-        folder = STORE / "test-mail"
-        folder.mkdir(mode=0o700, exist_ok=True)
-        if folder.is_symlink():
-            raise HTTPException(503)
-        os.chmod(folder,0o700)
-        path = folder / "latest.txt"
-        fd = os.open(path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
-        with os.fdopen(fd,"w") as f:
-            f.write("LOCAL TEST ONLY\n"+email+"\n"+code+"\nExpires in 5 minutes.\n")
+        raise HTTPException(503,"Local test mailbox unavailable") from None
     return response({"ok":True,"delivery":"local-test-file"})
 
 @router.post("/api/account/verify")
@@ -94,7 +110,7 @@ def verify(body: Verify, request: Request, background_tasks: BackgroundTasks):
             raise HTTPException(401,"Invalid or expired code")
         del pending[email]
     token = secrets.token_urlsafe(32)
-    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn, conn:
+    with closing(connect()) as conn, conn:
         created = conn.execute("INSERT INTO users(email,email_verified_at) VALUES(?,CURRENT_TIMESTAMP) ON CONFLICT(email) DO NOTHING",(email,)).rowcount == 1
         uid, role, blocked = conn.execute("SELECT id,role,blocked FROM users WHERE email=?",(email,)).fetchone()
         if blocked or role!="user":
@@ -115,13 +131,13 @@ def send_welcome(email,uid):
         event="welcome_smtp_accepted"
     except Exception:
         event="welcome_delivery_failed"
-    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn, conn:
+    with closing(connect()) as conn, conn:
         conn.execute("INSERT INTO audit(action,user_id) VALUES(?,?)",(event,uid))
 
 @router.get("/api/account/me")
 def me(request: Request):
     local(request)
-    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn:
+    with closing(connect()) as conn:
         conn.row_factory=sqlite3.Row
         row=conn.execute("SELECT u.email,u.plan,u.role FROM customer_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>? AND u.blocked=0 AND u.role='user'",(digest(request.cookies.get(COOKIE,"")),int(time.time()))).fetchone()
     if not row:
@@ -131,7 +147,7 @@ def me(request: Request):
 @router.post("/api/account/logout")
 def logout(request: Request):
     local(request)
-    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn, conn:
+    with closing(connect()) as conn, conn:
         conn.execute("DELETE FROM customer_sessions WHERE token_hash=?",(digest(request.cookies.get(COOKIE,"")),))
     result=response({"ok":True})
     result.delete_cookie(COOKIE,path="/api/account")

@@ -11,7 +11,7 @@ from argon2.exceptions import VerifyMismatchError, VerificationError
 
 router = APIRouter()
 ROOT = Path(__file__).resolve().parent
-STORE = Path.home() / ".kurdway"
+from database import STORE, connect
 COOKIE = "kurdway_admin"
 ph = PasswordHasher()
 sessions = {}
@@ -82,7 +82,7 @@ def logout(request: Request):
 @router.get("/api/admin/overview")
 def overview(request: Request, days: int = Query(30, ge=7, le=90)):
     require_admin(request)
-    with closing(sqlite3.connect(STORE / "development.sqlite3")) as conn:
+    with closing(connect()) as conn:
         conn.row_factory = sqlite3.Row
         counts = dict(conn.execute("SELECT plan, count(*) FROM users GROUP BY plan").fetchall())
         users = [dict(r) for r in conn.execute("SELECT id, email, role, plan, created_at, blocked, CASE WHEN email LIKE \'%@example.com\' THEN 1 ELSE 0 END AS test_account FROM users ORDER BY id DESC LIMIT 100")]
@@ -107,7 +107,7 @@ class AccountStatus(BaseModel):
 @router.post("/api/admin/users/{uid}/status")
 def change_status(uid: int, body: AccountStatus, request: Request):
     require_admin(request)
-    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn, conn:
+    with closing(connect()) as conn, conn:
         cursor = conn.execute("UPDATE users SET blocked=? WHERE id=? AND role='user'", (int(body.blocked),uid))
         if cursor.rowcount != 1:
             raise HTTPException(404, "Customer not found")

@@ -35,7 +35,7 @@ def require_admin(request):
     return token
 
 def page(name):
-    return HTMLResponse((ROOT / name).read_text(), headers={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'self'; script-src 'self'; style-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'","Referrer-Policy":"no-referrer"})
+    return HTMLResponse((ROOT / name).read_text(), headers={"Cache-Control":"no-store","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'","Referrer-Policy":"no-referrer"})
 
 class Login(BaseModel):
     password: str = Field(min_length=1, max_length=256)
@@ -93,7 +93,12 @@ def overview(request: Request, days: int = Query(30, ge=7, le=90)):
         admins = conn.execute("SELECT count(*) FROM users WHERE role='admin'").fetchone()[0]
         verified = conn.execute("SELECT count(*) FROM users WHERE email_verified_at IS NOT NULL AND email_verified_at != ''").fetchone()[0]
         events = [dict(r) for r in conn.execute("SELECT action,user_id,created_at FROM audit ORDER BY id DESC LIMIT 50")]
-    return JSONResponse({"events":events,"trend":trend,"new_users":sum(p["count"] for p in trend),"admins":admins,"verified":verified,"total":total,"free":counts.get("free",0),"premium":counts.get("premium",0),"users":users,"mode":"Local development","billing":"Not connected","mail":"Not connected"},headers={"Cache-Control":"no-store"})
+    from mail_delivery import settings
+    try:
+        mail_status = "SMTP configured (delivery unverified)" if settings() else "Local test only"
+    except (OSError, ValueError, RuntimeError):
+        mail_status = "Configuration error"
+    return JSONResponse({"events":events,"trend":trend,"new_users":sum(p["count"] for p in trend),"admins":admins,"verified":verified,"total":total,"free":counts.get("free",0),"premium":counts.get("premium",0),"users":users,"mode":"Local development","billing":"Not connected","mail":mail_status},headers={"Cache-Control":"no-store"})
 
 class AccountStatus(BaseModel):
     blocked: bool

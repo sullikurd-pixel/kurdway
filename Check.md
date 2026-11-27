@@ -1,0 +1,12 @@
+# Release checklist
+- [ ] Existing source imported and reviewed for secrets and licenses
+- [ ] Reproducible build and tests passing
+- [ ] English, Sorani RTL and Kurmanji verified
+- [ ] Authentication and cross-account access tests passing
+- [ ] Dependency and secret scans reviewed
+- [ ] GPS privacy and media metadata removal tested
+- [ ] Offline maps and route accuracy field-tested
+- [ ] Moderation and hazard reporting tested
+- [ ] TLS, backups, restore and rollback tested in staging
+- [ ] No unresolved critical/high security findings
+- [ ] Release approval documented

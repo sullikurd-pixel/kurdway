@@ -1,7 +1,9 @@
 """Local-only owner console. Separate from customer authentication."""
 import os, secrets, sqlite3, time, threading
+from datetime import date, timedelta
+from contextlib import closing
 from pathlib import Path
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 from argon2 import PasswordHasher
@@ -53,7 +55,7 @@ def login(body: Login, request: Request):
             raise HTTPException(429, "Try again in five minutes")
         attempts.append(now)
     path = STORE / "owner.hash"
-    if not path.is_file():
+    if not path.is_file() or path.is_symlink():
         raise HTTPException(503, "Initialize the local owner first")
     try:
         ph.verify(path.read_text().strip(), body.password)
@@ -78,14 +80,19 @@ def logout(request: Request):
     return response
 
 @router.get("/api/admin/overview")
-def overview(request: Request):
+def overview(request: Request, days: int = Query(30, ge=7, le=90)):
     require_admin(request)
-    with sqlite3.connect(STORE / "development.sqlite3") as conn:
+    with closing(sqlite3.connect(STORE / "development.sqlite3")) as conn:
         conn.row_factory = sqlite3.Row
         counts = dict(conn.execute("SELECT plan, count(*) FROM users GROUP BY plan").fetchall())
         users = [dict(r) for r in conn.execute("SELECT id, email, role, plan, created_at FROM users ORDER BY id DESC LIMIT 100")]
         total = conn.execute("SELECT count(*) FROM users").fetchone()[0]
-    return JSONResponse({"total":total,"free":counts.get("free",0),"premium":counts.get("premium",0),"users":users,"mode":"Local development","billing":"Not connected","mail":"Not connected"},headers={"Cache-Control":"no-store"})
+        start = date.today() - timedelta(days=days-1)
+        series = dict(conn.execute("SELECT date(created_at), count(*) FROM users WHERE date(created_at)>=? GROUP BY date(created_at)", (start.isoformat(),)))
+        trend = [{"date": (start+timedelta(days=i)).isoformat(), "count": series.get((start+timedelta(days=i)).isoformat(),0)} for i in range(days)]
+        admins = conn.execute("SELECT count(*) FROM users WHERE role='admin'").fetchone()[0]
+        verified = conn.execute("SELECT count(*) FROM users WHERE email_verified_at IS NOT NULL AND email_verified_at != ''").fetchone()[0]
+    return JSONResponse({"trend":trend,"new_users":sum(p["count"] for p in trend),"admins":admins,"verified":verified,"total":total,"free":counts.get("free",0),"premium":counts.get("premium",0),"users":users,"mode":"Local development","billing":"Not connected","mail":"Not connected"},headers={"Cache-Control":"no-store"})
 
 def setup():
     import getpass

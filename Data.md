@@ -1,0 +1,2 @@
+# Data and privacy
+Collect minimum necessary data. Exact GPS, tracks and identities private by default; explicit opt-in for publishing. Remove photo EXIF location, redact sensitive start/end points, avoid public live tracking and sensitive sites. Review local threats before any route publication. Encrypt transit and storage; define retention, deletion, export, backup and access rules before launch. Review applicable privacy laws and map/media licenses. Never commit personal data or real production datasets.

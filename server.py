@@ -15,7 +15,7 @@ async def lifespan(app):
     initialize()
     yield
 
-app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.5.0-dev", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.6.0-dev", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"])
 
 app.include_router(admin_router)

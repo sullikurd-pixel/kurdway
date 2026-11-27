@@ -95,7 +95,8 @@ def verify(body: Verify, request: Request):
         conn.execute("INSERT INTO customer_sessions VALUES(?,?,?)",(digest(token),uid,int(time.time())+3600))
         conn.execute("INSERT INTO audit(action,user_id) VALUES('customer_login',?)",(uid,))
     result=response({"ok":True})
-    result.set_cookie(COOKIE,token,httponly=True,samesite="strict",max_age=3600,path="/api/account")
+    result.delete_cookie(COOKIE,path="/api/account")
+    result.set_cookie(COOKIE,token,httponly=True,samesite="strict",max_age=3600,path="/api")
     return result
 
 @router.get("/api/account/me")
@@ -115,4 +116,5 @@ def logout(request: Request):
         conn.execute("DELETE FROM customer_sessions WHERE token_hash=?",(digest(request.cookies.get(COOKIE,"")),))
     result=response({"ok":True})
     result.delete_cookie(COOKIE,path="/api/account")
+    result.delete_cookie(COOKIE,path="/api")
     return result

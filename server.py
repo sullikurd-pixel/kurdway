@@ -2,6 +2,7 @@
 from pathlib import Path
 from contextlib import asynccontextmanager
 from database import initialize
+from admin import router as admin_router
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -12,8 +13,10 @@ async def lifespan(app):
     initialize()
     yield
 
-app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.3.1-dev", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.3.2-dev", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"])
+
+app.include_router(admin_router)
 
 @app.get("/api/health")
 def health():
@@ -29,7 +32,7 @@ def favicon():
 
 @app.get("/{name}")
 def asset(name: str):
-    if name not in {"index.html", "style.css", "app.js", "ui.js", "favicon.svg"}:
+    if name not in {"index.html", "style.css", "app.js", "ui.js", "favicon.svg", "admin.css", "admin.js"}:
         raise HTTPException(status_code=404)
     path = ROOT / name
     if not path.is_file() or path.is_symlink():

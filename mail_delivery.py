@@ -1,0 +1,43 @@
+"""Opt-in SMTP delivery for loopback development. Credentials never in repository."""
+import os, json, ssl, smtplib, getpass
+from pathlib import Path
+from email.message import EmailMessage
+from email_validator import validate_email
+
+CONFIG = Path.home()/".kurdway"/"smtp.json"
+
+def settings():
+    if not CONFIG.exists():
+        return None
+    if CONFIG.is_symlink() or CONFIG.stat().st_mode & 0o077:
+        raise RuntimeError("SMTP config must be private")
+    return json.loads(CONFIG.read_text())
+
+def deliver(email,code,config):
+    message=EmailMessage()
+    message["From"]=config["sender"]
+    message["To"]=email
+    message["Subject"]="KURDWAY | Your sign-in code"
+    message.set_content("Your KURDWAY sign-in code is "+code+". It expires in five minutes. Do not share it. If you did not request it, ignore this email.")
+    with smtplib.SMTP_SSL(config["host"],465,timeout=10,context=ssl.create_default_context()) as smtp:
+        smtp.login(config["username"],config["password"])
+        smtp.send_message(message)
+
+def setup():
+    from database import initialize
+    initialize()
+    host=input("SMTP host (TLS port 465): ").strip()
+    username=input("SMTP username: ").strip()
+    sender=validate_email(input("Authorized sender email: ").strip(),check_deliverability=False).normalized
+    password=getpass.getpass("SMTP app password (hidden): ")
+    if not host or not username or not password:
+        raise SystemExit("Missing settings")
+    with smtplib.SMTP_SSL(host,465,timeout=10,context=ssl.create_default_context()) as smtp:
+        smtp.login(username,password)
+    fd=os.open(CONFIG,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o600)
+    with os.fdopen(fd,"w") as f:
+        json.dump(dict(host=host,username=username,sender=sender,password=password),f)
+    print("SMTP authentication successful. Restart KURDWAY. Delivery still needs testing.")
+
+if __name__=="__main__":
+    setup()

@@ -29,7 +29,13 @@ def send(email,subject,plain,html,config):
     message["To"]=email
     message["Subject"]=subject
     message.set_content(plain)
+    logo=Path.home()/".kurdway"/"brand-logo.jpg"
+    logo_bytes=logo.read_bytes() if logo.is_file() and not logo.is_symlink() and logo.stat().st_size<2_000_000 else None
+    if logo_bytes:
+        html=html.replace("▲ KURDWAY",'<img src="cid:kurdway-brand" width="120" height="120" alt="KurdWay logo"><br>KURDWAY')
     message.add_alternative(html,subtype="html")
+    if logo_bytes:
+        message.get_payload()[-1].add_related(logo_bytes,maintype="image",subtype="jpeg",cid="<kurdway-brand>",disposition="inline")
     with smtplib.SMTP(config["host"],587,timeout=10) as smtp:
         smtp.ehlo()
         smtp.starttls(context=tls_context())

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, EmailStr
 from admin import STORE, local, page
+from mail_delivery import settings, deliver
 
 router = APIRouter()
 COOKIE = "kurdway_customer"
@@ -29,7 +30,7 @@ def otp_digest(email, code):
 def test_email(value):
     email = str(value).lower()
     # Use a reserved test subdomain accepted by email-validator.
-    if not email.endswith("@example.com"):
+    if not email.endswith("@example.com") and settings() is None:
         raise HTTPException(400, "Local preview: use an example.com test address only")
     return email
 
@@ -56,6 +57,13 @@ def request_code(body: Email, request: Request):
         requests.append(now)
         code = f"{secrets.randbelow(1000000):06d}"
         pending[email] = (otp_digest(email,code),now+300,0,now)
+        if not email.endswith("@example.com"):
+            try:
+                deliver(email,code,settings())
+            except Exception:
+                pending.pop(email,None)
+                raise HTTPException(503,"Email delivery unavailable. Contact the owner.")
+            return response({"ok":True,"delivery":"email"})
         # Local preview only; never expose codes in API responses.
         folder = STORE / "test-mail"
         folder.mkdir(mode=0o700, exist_ok=True)

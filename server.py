@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from database import initialize
 from admin import router as admin_router
 from account import router as account_router
+from customer import router as customer_router
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -14,11 +15,12 @@ async def lifespan(app):
     initialize()
     yield
 
-app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.4.0-dev", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.4.1-dev", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"])
 
 app.include_router(admin_router)
 app.include_router(account_router)
+app.include_router(customer_router)
 
 @app.get("/api/health")
 def health():

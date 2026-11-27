@@ -1,0 +1,2 @@
+# Authentication and authorization
+Planned requirements: use maintained authentication libraries, secure password hashing (Argon2id where applicable), MFA for admins, verified recovery, rate limits, short-lived sessions and secure HttpOnly SameSite cookies for web. Enforce server-side resource ownership and roles on every request; deny by default. Test cross-account access, session revocation, reset abuse, CSRF and login throttling. Never log tokens or passwords.

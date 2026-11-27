@@ -6,7 +6,8 @@ from typing import Literal
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel, Field
 from account import COOKIE, digest, response
-from admin import STORE, local
+from admin import local
+from database import connect
 
 router = APIRouter(prefix="/api/customer")
 PLACES = ("Halgurd","Sulaymaniyah","Hawraman / Uraman Takht","Sanandaj","Hakkari","Mount Nemrut (Adıyaman)","Afrin","Qamishli")
@@ -14,9 +15,8 @@ PLACES = ("Halgurd","Sulaymaniyah","Hawraman / Uraman Takht","Sanandaj","Hakkari
 @contextmanager
 def authorized(request):
     local(request)
-    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn, conn:
+    with closing(connect()) as conn, conn:
         conn.row_factory=sqlite3.Row
-        conn.execute("PRAGMA foreign_keys=ON")
         if request.method!="GET":
             conn.execute("BEGIN IMMEDIATE")
         row=conn.execute("SELECT u.id FROM customer_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>? AND u.blocked=0 AND u.role='user'",(digest(request.cookies.get(COOKIE,"")),int(time.time()))).fetchone()

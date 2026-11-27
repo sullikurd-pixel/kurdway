@@ -2,9 +2,24 @@
 import sqlite3
 from pathlib import Path
 import os
+from contextlib import closing
+
+STORE = Path.home() / ".kurdway"
+
+def connect():
+    path = STORE / "development.sqlite3"
+    if STORE.is_symlink() or path.is_symlink() or not path.is_file():
+        raise RuntimeError("Missing or unsafe database path")
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
+    except Exception:
+        conn.close()
+        raise
 
 def initialize():
-    folder = Path.home() / ".kurdway"
+    folder = STORE
     folder.mkdir(mode=0o700, exist_ok=True)
     if folder.is_symlink():
         raise RuntimeError("Unsafe database directory")
@@ -15,7 +30,7 @@ def initialize():
     fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
     os.close(fd)
     os.chmod(path, 0o600)
-    with sqlite3.connect(path) as conn:
+    with closing(connect()) as conn, conn:
         conn.execute("""CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY,
             email TEXT NOT NULL UNIQUE,

@@ -13,7 +13,7 @@ async def lifespan(app):
     initialize()
     yield
 
-app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.3.2-dev", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.3.3-dev", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"])
 
 app.include_router(admin_router)
@@ -37,4 +37,4 @@ def asset(name: str):
     path = ROOT / name
     if not path.is_file() or path.is_symlink():
         raise HTTPException(status_code=404)
-    return FileResponse(path, headers={"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"})
+    return FileResponse(path, headers={"X-Content-Type-Options": "nosniff", "Referrer-Policy": "strict-origin-when-cross-origin" if name == "index.html" else "no-referrer"})

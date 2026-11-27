@@ -1,11 +1,11 @@
 """Local test-account OTP flow. No real email delivery or production use."""
 import hashlib, hmac, secrets, threading, time, sqlite3, os
 from contextlib import closing
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, EmailStr
 from admin import STORE, local, page
-from mail_delivery import settings, deliver
+from mail_delivery import settings, deliver, welcome
 
 router = APIRouter()
 COOKIE = "kurdway_customer"
@@ -77,7 +77,7 @@ def request_code(body: Email, request: Request):
     return response({"ok":True,"delivery":"local-test-file"})
 
 @router.post("/api/account/verify")
-def verify(body: Verify, request: Request):
+def verify(body: Verify, request: Request, background_tasks: BackgroundTasks):
     local(request)
     email = test_email(body.email)
     now = time.monotonic()
@@ -95,17 +95,28 @@ def verify(body: Verify, request: Request):
         del pending[email]
     token = secrets.token_urlsafe(32)
     with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn, conn:
-        conn.execute("INSERT INTO users(email,email_verified_at) VALUES(?,CURRENT_TIMESTAMP) ON CONFLICT(email) DO NOTHING",(email,))
+        created = conn.execute("INSERT INTO users(email,email_verified_at) VALUES(?,CURRENT_TIMESTAMP) ON CONFLICT(email) DO NOTHING",(email,)).rowcount == 1
         uid, role, blocked = conn.execute("SELECT id,role,blocked FROM users WHERE email=?",(email,)).fetchone()
         if blocked or role!="user":
             raise HTTPException(403,"Account unavailable")
         conn.execute("DELETE FROM customer_sessions WHERE expires<=? OR user_id=?",(int(time.time()),uid))
         conn.execute("INSERT INTO customer_sessions VALUES(?,?,?)",(digest(token),uid,int(time.time())+3600))
         conn.execute("INSERT INTO audit(action,user_id) VALUES('customer_login',?)",(uid,))
+    if created and not email.endswith("@example.com"):
+        background_tasks.add_task(send_welcome, email, uid)
     result=response({"ok":True})
     result.delete_cookie(COOKIE,path="/api/account")
     result.set_cookie(COOKIE,token,httponly=True,samesite="strict",max_age=3600,path="/api")
     return result
+
+def send_welcome(email,uid):
+    try:
+        welcome(email,settings())
+        event="welcome_smtp_accepted"
+    except Exception:
+        event="welcome_delivery_failed"
+    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn, conn:
+        conn.execute("INSERT INTO audit(action,user_id) VALUES(?,?)",(event,uid))
 
 @router.get("/api/account/me")
 def me(request: Request):

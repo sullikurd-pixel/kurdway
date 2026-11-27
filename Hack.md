@@ -1,0 +1,2 @@
+# Authorized defensive security testing
+Test only owned or explicitly authorized systems, preferably staging with synthetic accounts and data. Check access control, input validation, upload limits and content types, session security, dependencies, secrets, rate limits and backup recovery. No testing of third-party services without permission. Record scope, evidence without personal data, severity, remediation and retest. Report privately.

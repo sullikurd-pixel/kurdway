@@ -36,5 +36,21 @@ def initialize():
             expires INTEGER NOT NULL
         )""")
         conn.execute("CREATE INDEX IF NOT EXISTS customer_sessions_user ON customer_sessions(user_id)")
+        conn.execute("""CREATE TABLE IF NOT EXISTS customer_profiles (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id),
+            display_name TEXT NOT NULL DEFAULT '',
+            language TEXT NOT NULL DEFAULT 'en'
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS customer_favorites (
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            place TEXT NOT NULL,
+            PRIMARY KEY(user_id,place)
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS customer_activities (
+            id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
+            title TEXT NOT NULL, activity_date TEXT NOT NULL,
+            distance_km REAL NOT NULL, elevation_m INTEGER NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS activities_user ON customer_activities(user_id)")
         conn.execute("SELECT id, email, role, plan FROM users LIMIT 0")
     return True

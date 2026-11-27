@@ -4,7 +4,8 @@ from contextlib import closing
 from fastapi import APIRouter, Request, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, EmailStr
-from admin import STORE, local, page
+from admin import local, page
+from database import STORE, connect
 from mail_delivery import settings, deliver, welcome
 
 router = APIRouter()
@@ -94,7 +95,7 @@ def verify(body: Verify, request: Request, background_tasks: BackgroundTasks):
             raise HTTPException(401,"Invalid or expired code")
         del pending[email]
     token = secrets.token_urlsafe(32)
-    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn, conn:
+    with closing(connect()) as conn, conn:
         created = conn.execute("INSERT INTO users(email,email_verified_at) VALUES(?,CURRENT_TIMESTAMP) ON CONFLICT(email) DO NOTHING",(email,)).rowcount == 1
         uid, role, blocked = conn.execute("SELECT id,role,blocked FROM users WHERE email=?",(email,)).fetchone()
         if blocked or role!="user":
@@ -115,13 +116,13 @@ def send_welcome(email,uid):
         event="welcome_smtp_accepted"
     except Exception:
         event="welcome_delivery_failed"
-    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn, conn:
+    with closing(connect()) as conn, conn:
         conn.execute("INSERT INTO audit(action,user_id) VALUES(?,?)",(event,uid))
 
 @router.get("/api/account/me")
 def me(request: Request):
     local(request)
-    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn:
+    with closing(connect()) as conn:
         conn.row_factory=sqlite3.Row
         row=conn.execute("SELECT u.email,u.plan,u.role FROM customer_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires>? AND u.blocked=0 AND u.role='user'",(digest(request.cookies.get(COOKIE,"")),int(time.time()))).fetchone()
     if not row:
@@ -131,7 +132,7 @@ def me(request: Request):
 @router.post("/api/account/logout")
 def logout(request: Request):
     local(request)
-    with closing(sqlite3.connect(STORE/"development.sqlite3")) as conn, conn:
+    with closing(connect()) as conn, conn:
         conn.execute("DELETE FROM customer_sessions WHERE token_hash=?",(digest(request.cookies.get(COOKIE,"")),))
     result=response({"ok":True})
     result.delete_cookie(COOKIE,path="/api/account")

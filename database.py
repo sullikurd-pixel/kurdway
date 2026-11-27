@@ -24,5 +24,17 @@ def initialize():
             email_verified_at TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(users)")}
+        if "blocked" not in columns:
+            conn.execute("ALTER TABLE users ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0 CHECK(blocked IN (0,1))")
+        conn.execute("""CREATE TABLE IF NOT EXISTS audit (
+            id INTEGER PRIMARY KEY, action TEXT NOT NULL, user_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS customer_sessions (
+            token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id),
+            expires INTEGER NOT NULL
+        )""")
+        conn.execute("CREATE INDEX IF NOT EXISTS customer_sessions_user ON customer_sessions(user_id)")
         conn.execute("SELECT id, email, role, plan FROM users LIMIT 0")
     return True

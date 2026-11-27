@@ -85,20 +85,21 @@ def overview(request: Request, days: int = Query(30, ge=7, le=90)):
     with closing(sqlite3.connect(STORE / "development.sqlite3")) as conn:
         conn.row_factory = sqlite3.Row
         counts = dict(conn.execute("SELECT plan, count(*) FROM users GROUP BY plan").fetchall())
-        users = [dict(r) for r in conn.execute("SELECT id, email, role, plan, created_at, blocked FROM users ORDER BY id DESC LIMIT 100")]
+        users = [dict(r) for r in conn.execute("SELECT id, email, role, plan, created_at, blocked, CASE WHEN email LIKE \'%@example.com\' THEN 1 ELSE 0 END AS test_account FROM users ORDER BY id DESC LIMIT 100")]
         total = conn.execute("SELECT count(*) FROM users").fetchone()[0]
         start = date.today() - timedelta(days=days-1)
         series = dict(conn.execute("SELECT date(created_at), count(*) FROM users WHERE date(created_at)>=? GROUP BY date(created_at)", (start.isoformat(),)))
         trend = [{"date": (start+timedelta(days=i)).isoformat(), "count": series.get((start+timedelta(days=i)).isoformat(),0)} for i in range(days)]
         admins = conn.execute("SELECT count(*) FROM users WHERE role='admin'").fetchone()[0]
-        verified = conn.execute("SELECT count(*) FROM users WHERE email_verified_at IS NOT NULL AND email_verified_at != ''").fetchone()[0]
+        verified = conn.execute("SELECT count(*) FROM users WHERE email_verified_at IS NOT NULL AND email_verified_at != '' AND email NOT LIKE '%@example.com'").fetchone()[0]
+        test_accounts = conn.execute("SELECT count(*) FROM users WHERE email LIKE '%@example.com'").fetchone()[0]
         events = [dict(r) for r in conn.execute("SELECT action,user_id,created_at FROM audit ORDER BY id DESC LIMIT 50")]
     from mail_delivery import settings
     try:
         mail_status = "SMTP configured (delivery unverified)" if settings() else "Local test only"
     except (OSError, ValueError, RuntimeError):
         mail_status = "Configuration error"
-    return JSONResponse({"events":events,"trend":trend,"new_users":sum(p["count"] for p in trend),"admins":admins,"verified":verified,"total":total,"free":counts.get("free",0),"premium":counts.get("premium",0),"users":users,"mode":"Local development","billing":"Not connected","mail":mail_status},headers={"Cache-Control":"no-store"})
+    return JSONResponse({"events":events,"trend":trend,"new_users":sum(p["count"] for p in trend),"admins":admins,"verified":verified,"test_accounts":test_accounts,"total":total,"free":counts.get("free",0),"premium":counts.get("premium",0),"users":users,"mode":"Local development","billing":"Not connected","mail":mail_status},headers={"Cache-Control":"no-store"})
 
 class AccountStatus(BaseModel):
     blocked: bool

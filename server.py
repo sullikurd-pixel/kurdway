@@ -15,7 +15,7 @@ async def lifespan(app):
     initialize()
     yield
 
-app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.6.0-dev", docs_url=None, redoc_url=None, openapi_url=None)
+app = FastAPI(lifespan=lifespan, title="KURDWAY", version="0.7.0-dev", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1"])
 
 app.include_router(admin_router)
@@ -30,13 +30,20 @@ def health():
 def home():
     return asset("index.html")
 
+@app.get("/brand-logo")
+def brand_logo():
+    logo=Path.home()/".kurdway"/"brand-logo.jpg"
+    if logo.is_file() and not logo.is_symlink():
+        return FileResponse(logo,media_type="image/jpeg",headers={"X-Content-Type-Options":"nosniff","Cache-Control":"no-cache"})
+    return asset("favicon.svg")
+
 @app.get("/favicon.ico")
 def favicon():
     return asset("favicon.svg")
 
 @app.get("/{name}")
 def asset(name: str):
-    if name not in {"index.html", "style.css", "app.js", "ui.js", "favicon.svg", "admin.css", "admin.js", "account.js", "customer.css"}:
+    if name not in {"index.html", "style.css", "app.js", "ui.js", "favicon.svg", "admin.css", "admin.js", "account.js", "customer.css", "customer-language.js"}:
         raise HTTPException(status_code=404)
     path = ROOT / name
     if not path.is_file() or path.is_symlink():

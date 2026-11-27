@@ -22,18 +22,35 @@ def tls_context():
     context.load_verify_locations(cafile=certifi.where())
     return context
 
-def deliver(email,code,config):
+def send(email,subject,plain,html,config):
+    from email.utils import formataddr
     message=EmailMessage()
-    message["From"]=config["sender"]
+    message["From"]=formataddr(("KURDWAY",config["sender"]))
     message["To"]=email
-    message["Subject"]="KURDWAY | Your sign-in code"
-    message.set_content("Your KURDWAY sign-in code is "+code+". It expires in five minutes. Do not share it. If you did not request it, ignore this email.")
+    message["Subject"]=subject
+    message.set_content(plain)
+    message.add_alternative(html,subtype="html")
     with smtplib.SMTP(config["host"],587,timeout=10) as smtp:
         smtp.ehlo()
         smtp.starttls(context=tls_context())
         smtp.ehlo()
         smtp.login(config["username"],config["password"])
         smtp.send_message(message)
+
+def layout(title,body):
+    return """<!doctype html><html lang="en"><body style="margin:0;background:#edf2ee;font-family:Arial,sans-serif;color:#18382b"><table role="presentation" width="100%" cellpadding="20"><tr><td align="center"><table role="presentation" width="100%" style="max-width:560px;background:white;border-radius:16px"><tr><td style="background:#153d2c;color:white;padding:30px;border-radius:16px 16px 0 0"><span style="font-size:28px;font-weight:bold">▲ KURDWAY</span><br><span style="font-size:13px">Nature belongs to everyone.</span></td></tr><tr><td style="padding:30px"><h1 style="font-size:24px">"""+title+"""</h1>"""+body+"""</td></tr><tr><td style="padding:24px;background:#f2f6f3;font-size:12px;color:#40584b">KURDWAY · Founder &amp; Developer: Sulli Kurd<br>Independent outdoor platform · Local development preview</td></tr></table></td></tr></table></body></html>"""
+
+def deliver(email,code,config):
+    if len(code)!=6 or not code.isascii() or not code.isdigit():
+        raise ValueError("Invalid code")
+    plain="Your KURDWAY sign-in code is "+code+". It expires in five minutes. Do not share it. If you did not request it, ignore this email."
+    html=layout("Your sign-in code","<p>Enter this code in KURDWAY to verify your email and sign in.</p><p style='background:#e9f3ec;font-size:34px;font-weight:bold;letter-spacing:7px;padding:20px;text-align:center'>"+code+"</p><p>Valid for five minutes. Never share this code with anyone.</p><p>If you did not request this code, ignore this email.</p>")
+    send(email,"KURDWAY | Your sign-in code",plain,html,config)
+
+def welcome(email,config):
+    plain="Welcome to KURDWAY! Your free account is ready. Save favorite places, record completed hikes and view your personal statistics. This is a local development preview, not a verified navigation service."
+    html=layout("Welcome to KURDWAY","<p>Your free account is ready.</p><ul><li>Save your favorite places</li><li>Record your completed hikes</li><li>View your personal statistics</li></ul><p>We are building an independent outdoor community. This is a local development preview, not a verified navigation service.</p>")
+    send(email,"Welcome to KURDWAY",plain,html,config)
 
 def setup():
     from database import initialize
